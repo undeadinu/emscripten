@@ -3432,7 +3432,7 @@ int main() {
     self.assertEqual(out.count(expected_output), 2)
 
     # test an abort during startup
-    run_process([PYTHON, EMCC, path_from_root('tests', 'hello_world.c'), '-s', 'BINARYEN_METHOD="interpret-binary"'])
+    run_process([PYTHON, EMCC, path_from_root('tests', 'hello_world.c')])
     os.remove('a.out.wasm') # trigger onAbort by intentionally causing startup to fail
     add_on_abort_and_verify()
 
@@ -7577,14 +7577,14 @@ int main() {
           (['-O2', '-s', 'EVAL_CTORS=1'], False, True, True), # ctor evaller turned off since only-wasm
           (['-O2', '-s', 'OUTLINING_LIMIT=1000'], True, True, False), # option forced
           (['-O2', '-s', 'OUTLINING_LIMIT=1000', '-s', 'ALLOW_MEMORY_GROWTH=1'], True, True, False), # option forced, and also check growth does not interfere
-          (['-O2', '-s', "BINARYEN_METHOD='interpret-s-expr,asmjs'"], True, True, False), # asmjs in methods means we need good asm.js
+          (['-O2', '-s', "BINARYEN_METHOD='asmjs'"], True, True, False), # asmjs in methods means we need good asm.js
           (['-O3'], False, True, True),
           (['-Os'], False, True, True),
           (['-Oz'], False, True, True), # ctor evaller turned off since only-wasm
         ]:
         try_delete('a.out.js')
         try_delete('a.out.wast')
-        cmd = [PYTHON, EMCC, path_from_root('tests', 'core', 'test_i64.c'), '-s', 'BINARYEN_METHOD="interpret-s-expr"'] + args
+        cmd = [PYTHON, EMCC, path_from_root('tests', 'core', 'test_i64.c')] + args
         print(args, 'js opts:', expect_js_opts, 'only-wasm:', expect_only_wasm, '   ', ' '.join(cmd))
         err = run_process(cmd, stdout=PIPE, stderr=PIPE).stderr
         assert expect_js_opts == ('applying js optimization passes:' in err), err
@@ -7626,7 +7626,7 @@ int main() {
         ]:
         print(args, expect)
         try_delete('a.out.js')
-        err = run_process([PYTHON, EMCC, path_from_root('tests', 'hello_world.cpp'), '-s', 'BINARYEN=1', '-s', 'BINARYEN_METHOD="interpret-binary"'] + args, stdout=PIPE, stderr=PIPE).stderr
+        err = run_process([PYTHON, EMCC, path_from_root('tests', 'hello_world.cpp'), '-s', 'BINARYEN=1'] + args, stdout=PIPE, stderr=PIPE).stderr
         assert expect == (' -emscripten-precise-f32' in err), err
         self.assertContained('hello, world!', run_js('a.out.js'))
 
@@ -7673,8 +7673,8 @@ int main() {
 
   @unittest.skipIf(SPIDERMONKEY_ENGINE not in JS_ENGINES, 'cannot run without spidermonkey')
   def test_binaryen_warn_sync(self):
-    # interpreting will disable async
-    for method in ['interpret-binary', 'native-wasm', None]:
+    # non-native will disable async
+    for method in ['asmjs', 'native-wasm', None]:
       cmd = [PYTHON, EMCC, path_from_root('tests', 'hello_world.cpp')]
       if method is not None:
         cmd += ['-s', 'BINARYEN_METHOD="' + method + '"']
@@ -7731,7 +7731,7 @@ int main() {
         (['-s', 'TOTAL_MEMORY=20971520',                                '-s', 'WASM_MEM_MAX=41943040'], 320, 640),
         (['-s', 'TOTAL_MEMORY=20971520', '-s', 'ALLOW_MEMORY_GROWTH=1', '-s', 'WASM_MEM_MAX=41943040'], 320, 640),
       ]:
-      cmd = [PYTHON, EMCC, path_from_root('tests', 'hello_world.c'), '-s', 'WASM=1', '-O2', '-s', 'BINARYEN_METHOD="interpret-s-expr"'] + args
+      cmd = [PYTHON, EMCC, path_from_root('tests', 'hello_world.c'), '-s', 'WASM=1', '-O2'] + args
       print(' '.join(cmd))
       run_process(cmd)
       for line in open('a.out.wast').readlines():
@@ -7856,7 +7856,7 @@ int main() {
     print('sizes:', sizes)
 
   def test_binaryen_methods(self):
-    for method_init in ['interpret-asm2wasm', 'interpret-s-expr', 'asmjs', 'interpret-binary', 'asmjs,interpret-binary', 'interpret-binary,asmjs']:
+    for method_init in ['asmjs', 'native-wasm', 'asmjs,native-wasm', 'native-wasm,asmjs']:
       # check success and failure for simple modes, only success for combined/fallback ones
       for success in [1, 0] if ',' not in method_init else [1]:
         method = method_init
@@ -7882,20 +7882,12 @@ int main() {
           with open('a.wasm.asm.js', 'w') as o:
             o.write(asm)
 
-        if method.startswith('interpret-asm2wasm'):
-          try_delete('a.wasm.wast') # we should not need the .wast
-          if not success:
-            break_cashew() # we need cashew
-        elif method.startswith('interpret-s-expr'):
-          try_delete('a.wasm.asm.js') # we should not need the .asm.js
-          if not success:
-            try_delete('a.wasm.wast')
-        elif method.startswith('asmjs'):
+        if method.startswith('asmjs'):
           try_delete('a.wasm.wast') # we should not need the .wast
           break_cashew() # we don't use cashew, so ok to break it
           if not success:
             try_delete('a.wasm.js')
-        elif method.startswith('interpret-binary'):
+        elif method.startswith('native-wasm'):
           try_delete('a.wasm.wast') # we should not need the .wast
           try_delete('a.wasm.asm.js') # we should not need the .asm.js
           if not success:
@@ -8053,12 +8045,9 @@ int main() {
         (['-s', 'TOTAL_MEMORY=32MB'], 2048),
         (['-s', 'TOTAL_MEMORY=32MB', '-s', 'ALLOW_MEMORY_GROWTH=1'], (2 * 1024 * 1024 * 1024 - 65536) // 16384),
         (['-s', 'TOTAL_MEMORY=32MB', '-s', 'ALLOW_MEMORY_GROWTH=1', '-s', 'WASM=0'], (2 * 1024 * 1024 * 1024 - 16777216) // 16384),
-        (['-s', 'TOTAL_MEMORY=32MB', '-s', 'BINARYEN=1', '-s', 'BINARYEN_METHOD="interpret-asm2wasm"'], 2048),
-        (['-s', 'TOTAL_MEMORY=32MB', '-s', 'ALLOW_MEMORY_GROWTH=1', '-s', 'BINARYEN=1', '-s', 'BINARYEN_METHOD="interpret-asm2wasm"'], (2 * 1024 * 1024 * 1024 - 65536) // 16384),
-        (['-s', 'TOTAL_MEMORY=32MB', '-s', 'ALLOW_MEMORY_GROWTH=1', '-s', 'BINARYEN=1', '-s', 'BINARYEN_METHOD="interpret-asm2wasm"', '-s', 'WASM_MEM_MAX=128MB'], 2048 * 4)
       ]:
       if self.is_wasm_backend():
-        if 'WASM=0' in args or 'BINARYEN_METHOD="interpret-asm2wasm"' in args:
+        if 'WASM=0' in args:
           continue
       cmd = [PYTHON, EMCC, path_from_root('tests', 'unistd', 'sysconf_phys_pages.c')] + args
       print(str(cmd))
