@@ -81,8 +81,7 @@ SUPPORTED_LINKER_FLAGS = (
 LIB_PREFIXES = ('', 'lib')
 
 JS_CONTAINING_SUFFIXES = ('js', 'html')
-EXECUTABLE_SUFFIXES = JS_CONTAINING_SUFFIXES + ('wasm',)
-
+EXECUTABLE_SUFFIXES = JS_CONTAINING_SUFFIXES + ('wasm', 'so', 'dylib', 'dll')
 DEFERRED_RESPONSE_FILES = ('EMTERPRETIFY_BLACKLIST', 'EMTERPRETIFY_WHITELIST', 'EMTERPRETIFY_SYNCLIST')
 
 # Mapping of emcc opt levels to llvm opt levels. We use llvm opt level 3 in emcc
@@ -1624,11 +1623,11 @@ There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR P
             logger.debug('link: ' + str(linker_inputs) + specified_target)
             # Sort arg tuples and pass the extracted values to link.
             shared.Building.link(linker_inputs, specified_target)
-        logger.debug('stopping at bitcode')
+        logger.debug('stopping at object file')
         if shared.Settings.SIDE_MODULE:
-          exit_with_error('SIDE_MODULE must only be used when compiling to an executable shared library, and not when emitting LLVM bitcode. That is, you should be emitting a .wasm file (for wasm) or a .js file (for asm.js). Note that when compiling to a typical native suffix for a shared library (.so, .dylib, .dll; which many build systems do) then Emscripten emits an LLVM bitcode file, which you should then compile to .wasm or .js with SIDE_MODULE.')
-        if final_suffix.lower() in ['so', 'dylib', 'dll']:
-          logger.warning('When Emscripten compiles to a typical native suffix for shared libraries (.so, .dylib, .dll) then it emits an LLVM bitcode file. You should then compile that to an emscripten SIDE_MODULE (using that flag) with suffix .wasm (for wasm) or .js (for asm.js). (You may also want to adapt your build system to emit the more standard suffix for a file with LLVM bitcode, \'.bc\', which would avoid this warning.)')
+          exit_with_error('SIDE_MODULE should only used when linking')
+        if shared.Settings.SIDE_MODULE:
+          exit_with_error('MAIN_MODULE should only used when linking')
         return 0
 
     # exit block 'process inputs'
@@ -1756,7 +1755,8 @@ There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR P
             save_intermediate('lto', 'bc')
             link_opts = []
           else:
-            # At minimum remove dead functions etc., this potentially saves a lot in the size of the generated code (and the time to compile it)
+            # At minimum remove dead functions etc., this potentially saves a
+            # lot in the size of the generated code (and the time to compile it)
             link_opts += shared.Building.get_safe_internalize() + ['-globaldce']
 
           if options.cfi:
