@@ -1625,9 +1625,9 @@ There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR P
             shared.Building.link(linker_inputs, specified_target)
         logger.debug('stopping at object file')
         if shared.Settings.SIDE_MODULE:
-          exit_with_error('SIDE_MODULE should only used when linking')
+          exit_with_error('SIDE_MODULE should only be used when linking')
         if shared.Settings.SIDE_MODULE:
-          exit_with_error('MAIN_MODULE should only used when linking')
+          exit_with_error('MAIN_MODULE should only be used when linking')
         return 0
 
     # exit block 'process inputs'
