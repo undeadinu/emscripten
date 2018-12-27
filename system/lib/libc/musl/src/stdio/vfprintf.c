@@ -9,6 +9,15 @@
 #include <math.h>
 #include <float.h>
 
+#ifdef __EMSCRIPTEN__
+// For emscripten, do all printing on doubles, even if the ABI has long ones.
+#define PRINTABLE_LONG_DOUBLE double
+#define FREXP_LONG_DOUBLE frexp
+#else
+#define PRINTABLE_LONG_DOUBLE long double
+#define FREXP_LONG_DOUBLE frexpl
+#endif
+
 /* Some useful macros */
 
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
@@ -122,7 +131,7 @@ static const unsigned char states[]['z'-'A'+1] = {
 union arg
 {
 	uintmax_t i;
-	long double f;
+	PRINTABLE_LONG_DOUBLE f;
 	void *p;
 };
 
@@ -152,7 +161,11 @@ static void pop_arg(union arg *arg, int type, va_list *ap)
 	break; case UIPTR:	arg->i = (uintptr_t)va_arg(*ap, void *);
 #endif
 	break; case DBL:	arg->f = va_arg(*ap, double);
+#ifdef EMSCRIPTEN
+	break; case LDBL:	abort(); // no long double printing code included
+#else
 	break; case LDBL:	arg->f = va_arg(*ap, long double);
+#endif
 	}
 }
 
@@ -200,10 +213,10 @@ static char *fmt_u(uintmax_t x, char *s)
  * depends on the float.h constants being right. If they are wrong, it
  * may overflow the stack. */
 #if LDBL_MANT_DIG == 53
-typedef char compiler_defines_long_double_incorrectly[9-(int)sizeof(long double)];
+typedef char compiler_defines_long_double_incorrectly[9-(int)sizeof(PRINTABLE_LONG_DOUBLE)];
 #endif
 
-static int fmt_fp(FILE *f, long double y, int w, int p, int fl, int t)
+static int fmt_fp(FILE *f, PRINTABLE_LONG_DOUBLE y, int w, int p, int fl, int t)
 {
 	uint32_t big[(LDBL_MANT_DIG+28)/29 + 1          // mantissa expansion
 		+ (LDBL_MAX_EXP+LDBL_MANT_DIG+28+8)/9]; // exponent expansion
@@ -233,11 +246,11 @@ static int fmt_fp(FILE *f, long double y, int w, int p, int fl, int t)
 		return MAX(w, 3+pl);
 	}
 
-	y = frexpl(y, &e2) * 2;
+	y = FREXP_LONG_DOUBLE(y, &e2) * 2;
 	if (y) e2--;
 
 	if ((t|32)=='a') {
-		long double round = 8.0;
+		PRINTABLE_LONG_DOUBLE round = 8.0;
 		int re;
 
 		if (t&32) prefix += 9;
@@ -341,8 +354,8 @@ static int fmt_fp(FILE *f, long double y, int w, int p, int fl, int t)
 		x = *d % i;
 		/* Are there any significant digits past j? */
 		if (x || d+1!=z) {
-			long double round = 2/LDBL_EPSILON;
-			long double small;
+			PRINTABLE_LONG_DOUBLE round = 2/LDBL_EPSILON;
+			PRINTABLE_LONG_DOUBLE small;
 			if (*d/i & 1) round += 2;
 			if (x<i/2) small=0x0.8p0;
 			else if (x==i/2 && d+1==z) small=0x1.0p0;
